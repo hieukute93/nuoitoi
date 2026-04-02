@@ -76,6 +76,9 @@
         .dot-blink { animation: blink 1s step-end infinite; }
         @keyframes blink { 50% { opacity: 0; } }
         
+        #comments-list::-webkit-scrollbar { width: 4px; }
+        #comments-list::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+        
         .news-card { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); border-color: rgba(0,0,0,0.03); }
         .news-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.05); }
 
@@ -583,11 +586,22 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "" };
+        // ĐÂY LÀ MÃ FIREBASE CỦA BẠN (Dùng để chạy trên GitHub)
+        const isCanvas = typeof __firebase_config !== 'undefined';
+        const firebaseConfig = isCanvas ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyDgNVmgZTecqNDAggaeB0KUIoUfLfI3iGA",
+            authDomain: "nuoi-hieu-93.firebaseapp.com",
+            projectId: "nuoi-hieu-93",
+            storageBucket: "nuoi-hieu-93.firebasestorage.app",
+            messagingSenderId: "38977989386",
+            appId: "1:38977989386:web:3227c483ea553d2ed3a8f3",
+            measurementId: "G-48V0Q57DJG"
+        };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'nuoi-hieu-final-v15';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'nuoi-hieu-final-v16';
 
         let user = null; let clientIP = "0.0.0.0";
 
@@ -606,16 +620,30 @@
         };
 
         const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { 
-                await signInWithCustomToken(auth, __initial_auth_token); 
-            } else { 
-                await signInAnonymously(auth); 
+            try {
+                if (isCanvas && typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { 
+                    await signInWithCustomToken(auth, __initial_auth_token); 
+                } else { 
+                    await signInAnonymously(auth); 
+                }
+            } catch(e) {
+                console.error("Lỗi đăng nhập:", e);
             }
-            onAuthStateChanged(auth, (u) => { user = u; if (user) loadComments(); });
+            onAuthStateChanged(auth, (u) => { 
+                user = u; 
+                if (user || !isCanvas) loadComments(); 
+            });
         };
 
+        function getCommentsCollection() {
+            if (isCanvas) {
+                return collection(db, 'artifacts', appId, 'public', 'data', 'guest_comments');
+            }
+            return collection(db, 'guest_comments');
+        }
+
         function loadComments() {
-            const commentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'guest_comments');
+            const commentsRef = getCommentsCollection();
             onSnapshot(commentsRef, (snapshot) => {
                 const comments = []; snapshot.forEach(doc => comments.push({ id: doc.id, ...doc.data() }));
                 comments.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
@@ -624,7 +652,7 @@
                 listEl.innerHTML = comments.map(c => `
                     <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-gray-100 dark:border-slate-700 flex gap-6 text-left shadow-sm hover:shadow-md transition-all duration-300 no-transform">
                         <div class="w-14 h-14 rounded-2xl bg-orange-100 dark:bg-slate-700 flex items-center justify-center text-orange-500 dark:text-orange-400 shrink-0 text-2xl shadow-inner"><i class="fa-solid fa-comment-dots"></i></div>
-                        <div class="flex-1">
+                        <div>
                             <div class="flex justify-between items-start mb-3">
                                 <h5 class="font-black text-gray-800 dark:text-white text-xl">${c.name || 'người lạ'}</h5>
                                 <span class="text-xs text-gray-400 dark:text-gray-300 font-bold font-mono bg-orange-50 dark:bg-slate-700 px-3 py-1 rounded-full border border-orange-100 dark:border-slate-600 uppercase tracking-widest ml-3">${c.ip || 'ẩn danh'}</span>
@@ -640,9 +668,9 @@
         document.getElementById('send-comment').addEventListener('click', async () => {
             const name = document.getElementById('guest-name').value.trim();
             const msg = document.getElementById('guest-message').value.trim();
-            if (!msg || !user) return;
+            if (!msg || (!user && isCanvas)) return;
             try { 
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'guest_comments'), { 
+                await addDoc(getCommentsCollection(), { 
                     name: name || "mạnh thường quân", 
                     message: msg, 
                     ip: clientIP, 
@@ -654,6 +682,7 @@
         });
 
         initAuth();
+        window.fetchIP();
     </script>
 
     <script>
